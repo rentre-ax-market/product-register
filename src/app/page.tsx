@@ -1,65 +1,111 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useState } from 'react'
+import { Toaster, toast } from 'sonner'
+import SearchForm from './components/SearchForm'
+import SourceCard from './components/SourceCard'
+import DownloadBar from './components/DownloadBar'
+import type { CrawlResponse } from '@/lib/crawlers/types'
+
+export default function HomePage() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [query, setQuery] = useState('')
+  const [result, setResult] = useState<CrawlResponse | null>(null)
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set())
+
+  const handleSearch = async (model: string) => {
+    setIsLoading(true)
+    setResult(null)
+    setSelectedImages(new Set())
+    setQuery(model)
+
+    try {
+      const res = await fetch('/api/crawl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      })
+      if (!res.ok) throw new Error('서버 오류')
+      const data: CrawlResponse = await res.json()
+      setResult(data)
+    } catch (e) {
+      toast.error('크롤링 중 오류가 발생했습니다.')
+      console.error(e)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleToggleImage = (url: string) => {
+    setSelectedImages((prev) => {
+      const next = new Set(prev)
+      next.has(url) ? next.delete(url) : next.add(url)
+      return next
+    })
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <>
+      <Toaster position="top-center" />
+
+      {/* Global nav */}
+      <nav className="sticky top-0 z-50 h-11 bg-black flex items-center px-5">
+        <span className="text-white text-[12px] tracking-[-0.12px] font-normal opacity-90">
+          상품 등록 도구
+        </span>
+      </nav>
+
+      <main className="flex-1 w-full max-w-[980px] mx-auto px-5 py-20">
+        {/* Hero */}
+        <div className="text-center mb-12">
+          <h1
+            className="text-[40px] font-semibold text-[#1d1d1f] mb-3"
+            style={{ letterSpacing: '-0.374px', lineHeight: 1.1 }}
+          >
+            상품 등록
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-[21px] font-normal text-[#6e6e73]" style={{ letterSpacing: '0' }}>
+            모델명으로 다나와 · 빌리고 스펙과 이미지를 수집합니다.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+
+        <SearchForm onSearch={handleSearch} isLoading={isLoading} />
+
+        {isLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-10">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="rounded-[18px] bg-white border border-[#e0e0e0] p-6 space-y-4 animate-pulse"
+              >
+                <div className="h-4 w-20 rounded-full bg-[#f0f0f0]" />
+                <div className="h-36 rounded-[11px] bg-[#f0f0f0]" />
+                <div className="h-20 rounded-[11px] bg-[#f0f0f0]" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {result && !isLoading && (
+          <div className="mt-10 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <SourceCard
+                source="danawa"
+                result={result.danawa}
+                selectedImages={selectedImages}
+                onToggleImage={handleToggleImage}
+              />
+              <SourceCard
+                source="biligo"
+                result={result.biligo}
+                selectedImages={selectedImages}
+                onToggleImage={handleToggleImage}
+              />
+            </div>
+            <DownloadBar model={query} result={result} selectedImages={selectedImages} />
+          </div>
+        )}
       </main>
-    </div>
-  );
+    </>
+  )
 }

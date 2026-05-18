@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 상품 등록 도구
 
-## Getting Started
+모델명으로 **다나와**·**빌리고** 두 사이트에서 제품 스펙과 이미지를 동시에 수집하는 내부 도구입니다.
 
-First, run the development server:
+## 주요 기능
+
+- 모델명 검색 → 다나와 / 빌리고 병렬 크롤링
+- 스펙 테이블 표시 및 JSON 다운로드
+- 이미지 선택 후 ZIP 다운로드
+- 빌리고 렌탈사별 월 렌탈료 비교표
+
+## 기술 스택
+
+- Next.js 15 (App Router) + TypeScript
+- Playwright (서버사이드 크롤링)
+- Tailwind CSS + shadcn/ui
+
+## 로컬 실행
 
 ```bash
+# 의존성 설치
+npm install
+
+# Chromium 설치 (최초 1회)
+npx playwright install chromium --with-deps
+
+# 개발 서버 실행
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3000 접속
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 크롤링 대상
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 사이트 | 수집 데이터 |
+|--------|------------|
+| 다나와 | 스펙, 썸네일/슬라이드/상세 이미지 |
+| 빌리고 | 스펙, 렌탈사별 가격표, 썸네일/상세 이미지 |
 
-## Learn More
+## 프로젝트 구조
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+├── app/
+│   ├── page.tsx                    # 메인 UI
+│   ├── api/crawl/route.ts          # 크롤링 API
+│   ├── api/download/images/        # 이미지 ZIP 다운로드 API
+│   └── components/                 # UI 컴포넌트
+└── lib/crawlers/
+    ├── danawa.ts                   # 다나와 크롤러
+    └── biligo.ts                   # 빌리고 크롤러
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 배포
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+마켓플레이스 배포 시 `rentre.config.json` 참조.  
+빌드 단계에서 Playwright Chromium이 자동 설치됩니다.

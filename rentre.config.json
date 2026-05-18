@@ -1,0 +1,15 @@
+{
+  "name": "상품 등록 도구",
+  "slug": "product-register",
+  "icon": "🔍",
+  "description": "모델명으로 다나와·빌리고 스펙과 이미지를 수집하는 내부 도구.",
+  "author": "hyun",
+  "version": "0.1.0",
+  "app": {
+    "dir": ".",
+    "install": "npm install && npx playwright install chromium --with-deps",
+    "build": "npm run build",
+    "start": "node .next/standalone/server.js",
+    "devCommand": "npm run dev -- -p $PORT"
+  }
+}
