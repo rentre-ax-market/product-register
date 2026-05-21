@@ -135,7 +135,7 @@ export async function crawlBiligo(model: string): Promise<CrawlResult> {
   const productName = productNameFromHtml($, first.model_name ?? model)
 
   const specs: Record<string, string> = {}
-  $('.txtBox dl').each((_, dl) => {
+  $('.txtBox dl, .tbl_prd_info dl').each((_, dl) => {
     const $dl = $(dl)
     const key = $dl.find('dt').first().text().trim()
     const val = $dl.find('dd').first().text().trim()

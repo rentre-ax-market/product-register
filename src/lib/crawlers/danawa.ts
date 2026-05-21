@@ -17,6 +17,31 @@ async function fetchText(url: string, init?: RequestInit): Promise<string> {
   return res.text()
 }
 
+function parseSpecList(text: string): Record<string, string> {
+  const specs: Record<string, string> = {}
+  let bareIndex = 1
+  const segments = text
+    .replace(/\s+/g, ' ')
+    .split(' / ')
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  for (let seg of segments) {
+    seg = seg.replace(/^\[[^\]]+\]\s*/, '').trim()
+    if (!seg) continue
+
+    const colon = seg.match(/^([^:]+?):\s*(.+)$/)
+    if (colon) {
+      const key = colon[1].trim()
+      const val = colon[2].trim()
+      if (key && val) specs[key] = val
+    } else {
+      specs[`특징${bareIndex++}`] = seg
+    }
+  }
+  return specs
+}
+
 export async function crawlDanawa(model: string): Promise<CrawlResult> {
   const searchUrl = `https://search.danawa.com/dsearch.php?query=${encodeURIComponent(
     model
@@ -25,7 +50,6 @@ export async function crawlDanawa(model: string): Promise<CrawlResult> {
   const $s = cheerio.load(searchHtml)
 
   let pcode: string | null = null
-  let productName = ''
   const thumbImages = new Set<string>()
 
   $s('.prod_main_info').each((_, el) => {
@@ -41,9 +65,6 @@ export async function crawlDanawa(model: string): Promise<CrawlResult> {
     if (!match) return
     pcode = match[1]
 
-    productName = $el.find('.prod_name a').first().text().trim()
-    if (!productName) productName = $el.find('img[alt]').first().attr('alt') ?? ''
-
     $el.find('img').each((__, img) => {
       const src = $s(img).attr('src')
       if (src && !src.startsWith('data:') && !src.includes('noImg')) {
@@ -55,55 +76,31 @@ export async function crawlDanawa(model: string): Promise<CrawlResult> {
   if (!pcode) throw new Error('검색 결과 없음')
 
   const productUrl = `https://prod.danawa.com/info/?pcode=${pcode}`
-
   const detailHtml = await fetchText(productUrl)
   const $d = cheerio.load(detailHtml)
-  const titleText = $d('title').text().trim()
-  const titleName = titleText.replace(/\s*:\s*다나와 가격비교\s*$/, '').trim()
-  if (titleName) productName = titleName
 
-  const ajaxBody = new URLSearchParams({ pcode })
-  const specHtml = await fetchText(
-    'https://prod.danawa.com/info/ajax/getProductDescription.ajax.php',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Referer: productUrl,
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      body: ajaxBody.toString(),
-    }
-  )
-  const $a = cheerio.load(specHtml)
+  const productName =
+    $d('.prod_tit .title').first().text().trim() ||
+    $d('.prod_tit').first().text().trim() ||
+    $d('title')
+      .text()
+      .replace(/\s*:\s*다나와 가격비교\s*$/, '')
+      .trim()
 
-  const specs: Record<string, string> = {}
-  $a('.spec_tbl tr').each((_, row) => {
-    const $row = $a(row)
-    if ($row.find('th[colspan="4"]').length > 0) return
-
-    const ths = $row.find('th.tit').toArray()
-    const tds = $row.find('td.dsc').toArray()
-    ths.forEach((th, i) => {
-      const key = $a(th).text().trim()
-      const val = $a(tds[i]).text().trim()
-      if (key && val && !key.includes('인증')) {
-        specs[key] = val
-      }
-    })
-  })
+  const specs = parseSpecList($d('.spec_list .items').first().text())
 
   const images = new Set<string>(thumbImages)
-  const addImg = ($: cheerio.CheerioAPI, sel: string) => {
-    $(sel).each((_, img) => {
-      const src = $(img).attr('src') || $(img).attr('data-src')
+  const addImg = (sel: string) => {
+    $d(sel).each((_, img) => {
+      const src = $d(img).attr('src') || $d(img).attr('data-src')
       if (src && !src.startsWith('data:') && !src.includes('noImg')) {
         images.add(src.startsWith('//') ? `https:${src}` : src)
       }
     })
   }
-  addImg($a, '.detail_cont img')
-  addImg($a, '.detail_export img')
+  addImg('.photo_w img')
+  addImg('.photo_slide img')
+  addImg('.thumb_image img')
 
   if (Object.keys(specs).length === 0 && images.size === 0) {
     throw new Error('스펙 없음')
