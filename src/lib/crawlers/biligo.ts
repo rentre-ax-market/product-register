@@ -1,99 +1,162 @@
-import { chromium } from 'playwright'
-import type { CrawlResult } from './types'
+import * as cheerio from 'cheerio'
+import type { CrawlResult, RentalRow } from './types'
 
 const BASE = 'https://xn--299ar6vqrd.com'
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
-export async function crawlBiligo(model: string): Promise<CrawlResult> {
-  const browser = await chromium.launch({ headless: true })
-  try {
-    const context = await browser.newContext({ userAgent: UA })
-    const page = await context.newPage()
+interface SearchListItem {
+  model?: string
+  model_name?: string
+  model_url?: string
+  model_thumnail_url?: string
+}
 
-    // 1. 검색: /model/search.php?ss_tx=모델명
-    await page.goto(
-      `${BASE}/model/search.php?ss_tx=${encodeURIComponent(model)}`,
-      { waitUntil: 'domcontentloaded', timeout: 15_000 }
-    )
-    await page.waitForTimeout(2000)
+interface SearchResponse {
+  Counts: number
+  Lists: SearchListItem[]
+}
 
-    // 2. 첫 번째 상품 링크 추출
-    // 목록 구조: a[href*="/model/compare.php?model_idx="] 안에 span.model(모델명), h3(상품명)
-    const productUrl = await page.evaluate((base: string) => {
-      const link = document.querySelector(
-        'a[href*="/model/compare.php?model_idx="]'
-      ) as HTMLAnchorElement | null
-      if (!link) return null
-      return link.href.startsWith('http') ? link.href : base + link.getAttribute('href')
-    }, BASE)
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': UA,
+      Accept: 'application/json',
+      Referer: BASE + '/',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return (await res.json()) as T
+}
 
-    if (!productUrl) throw new Error('검색 결과 없음')
+async function fetchHtml(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': UA,
+      'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+      Referer: BASE + '/',
+    },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.text()
+}
 
-    // 3. 상세 페이지 (/model/compare.php?model_idx=xxxxx&ca_id=xxx)
-    await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 })
-    await page.waitForTimeout(2000)
+function resolveUrl(src: string): string {
+  if (src.startsWith('http')) return src
+  if (src.startsWith('//')) return 'https:' + src
+  if (src.startsWith('/')) return BASE + src
+  return src
+}
 
-    // 4. 스펙 + 이미지 + 렌탈가격 + 태그 추출
-    const { productName, specs, images, rentalPrices, tags } = await page.evaluate(() => {
-      // 상품명: h2.ff_NSR
-      const productName =
-        (document.querySelector('h2.ff_NSR') as HTMLElement)?.innerText?.trim() ?? ''
+function extractImages($: cheerio.CheerioAPI): string[] {
+  const set = new Set<string>()
+  const add = (src: string | undefined) => {
+    if (!src || src.startsWith('data:')) return
+    if (src.includes('/img/energy_img')) return
+    set.add(resolveUrl(src))
+  }
 
-      // 스펙: .txtBox dl → dt(key) + dd(value)
-      const specs: Record<string, string> = {}
-      document.querySelectorAll('.txtBox dl').forEach((dl) => {
-        const key = (dl.querySelector('dt') as HTMLElement)?.innerText?.trim()
-        const val = (dl.querySelector('dd') as HTMLElement)?.innerText?.trim()
-        if (key && val) specs[key] = val
-      })
+  const ogImage = $('meta[property="og:image"]').attr('content')
+  add(ogImage)
 
-      // 렌탈사별 가격표: .compare_tbl ul li
-      // 구조: .titNm h3 (렌탈사), .compare_prc_check_box 반복 (.opt_name, .option_prc em, .option_card em)
-      const rentalPrices: { company: string; period: string; price: string; cardPrice: string }[] = []
-      document.querySelectorAll('.compare_tbl ul > li').forEach((li) => {
-        const company = (li.querySelector('.titNm h3') as HTMLElement)?.innerText?.trim() ?? ''
-        li.querySelectorAll('.compare_prc_check_box').forEach((box) => {
-          const period = (box.querySelector('.opt_name') as HTMLElement)?.innerText?.trim() ?? ''
-          const price = (box.querySelector('.option_prc dd em') as HTMLElement)?.innerText?.trim() ?? ''
-          const cardPrice = (box.querySelector('.option_card dd em') as HTMLElement)?.innerText?.trim() ?? '-'
-          if (company && period && price) {
-            rentalPrices.push({ company, period, price: price + '원', cardPrice: cardPrice !== '-' ? cardPrice + '원' : '-' })
-          }
+  $('.dtlImg_area img, .ma_dtlImg_area img, .gallery-big img, .photo_slide img, .big.slick-slide img').each(
+    (_, img) => {
+      add($(img).attr('src') ?? $(img).attr('data-src'))
+    }
+  )
+  return [...set]
+}
+
+function extractRentalPrices($: cheerio.CheerioAPI): RentalRow[] {
+  const rows: RentalRow[] = []
+  $('.compare_tbl ul > li').each((_, li) => {
+    const $li = $(li)
+    const company = $li.find('.titNm h3').first().text().trim()
+    $li.find('.compare_prc_check_box').each((__, box) => {
+      const $box = $(box)
+      const period = $box.find('.opt_name').first().text().trim()
+      const price = $box.find('.option_prc dd em').first().text().trim()
+      const cardPrice = $box.find('.option_card dd em').first().text().trim()
+      if (company && period && price) {
+        rows.push({
+          company,
+          period,
+          price: price + '원',
+          cardPrice: cardPrice ? cardPrice + '원' : '-',
         })
-      })
-
-      // 이미지 수집
-      const imageSet = new Set<string>()
-
-      // 썸네일 슬라이더: .big.slick-slide img
-      document.querySelectorAll<HTMLImageElement>('.big.slick-slide img').forEach((img) => {
-        const src = img.src || img.dataset.src
-        if (src && !src.startsWith('data:')) imageSet.add(src)
-      })
-
-      // 상세 이미지: .dtlImg_area img (에너지효율 안내 이미지 제외)
-      document.querySelectorAll<HTMLImageElement>('.dtlImg_area img').forEach((img) => {
-        const src = img.src || img.dataset.src
-        if (src && !src.startsWith('data:') && !src.includes('/img/energy_img')) {
-          imageSet.add(src)
-        }
-      })
-
-      // 태그: .prd_tag ul li span (# 제거)
-      const tags: string[] = []
-      document.querySelectorAll<HTMLElement>('.prd_tag ul li span').forEach((span) => {
-        const text = span.innerText?.trim().replace(/^#/, '')
-        if (text) tags.push(text)
-      })
-
-      return { productName, specs, images: [...imageSet], rentalPrices, tags }
+      }
     })
+  })
+  return rows
+}
 
-    if (Object.keys(specs).length === 0) throw new Error('스펙 없음')
+function extractTags($: cheerio.CheerioAPI): string[] {
+  const tags: string[] = []
+  $('.prd_tag ul li span').each((_, el) => {
+    const text = $(el).text().trim().replace(/^#/, '')
+    if (text) tags.push(text)
+  })
+  return tags
+}
 
-    return { source: 'biligo', productName, specs, images, productUrl, rentalPrices, tags }
-  } finally {
-    await browser.close()
+function productNameFromHtml($: cheerio.CheerioAPI, fallback: string): string {
+  const ogTitle = $('meta[property="og:title"]').attr('content') ?? ''
+  const cleaned = ogTitle.replace(/\s*\|.*$/, '').trim()
+  if (cleaned) return cleaned
+
+  const h2 = $('h2.ff_NSR')
+    .toArray()
+    .map((el) => $(el).text().trim())
+    .filter((t) => t && !t.includes('렌탈사 비교') && !t.includes('상품 상세') && !t.includes('상품 요약'))
+  if (h2[0]) return h2[0]
+
+  return fallback
+}
+
+export async function crawlBiligo(model: string): Promise<CrawlResult> {
+  const apiUrl = `${BASE}/api/v2/models/search?ss_tx=${encodeURIComponent(
+    model
+  )}&filter_section=rental&section=models`
+  const data = await fetchJson<SearchResponse>(apiUrl)
+
+  if (!data.Counts || !data.Lists?.length) {
+    throw new Error('검색 결과 없음')
+  }
+
+  const first = data.Lists[0]
+  const relativeUrl = first.model_url
+  if (!relativeUrl) throw new Error('검색 결과 없음')
+
+  const productUrl = relativeUrl.startsWith('http') ? relativeUrl : BASE + relativeUrl
+  const html = await fetchHtml(productUrl)
+  const $ = cheerio.load(html)
+
+  const productName = productNameFromHtml($, first.model_name ?? model)
+
+  const specs: Record<string, string> = {}
+  $('.txtBox dl').each((_, dl) => {
+    const $dl = $(dl)
+    const key = $dl.find('dt').first().text().trim()
+    const val = $dl.find('dd').first().text().trim()
+    if (key && val) specs[key] = val
+  })
+
+  if (Object.keys(specs).length === 0 && first.model) {
+    specs['모델명'] = first.model
+  }
+
+  const images = extractImages($)
+  const rentalPrices = extractRentalPrices($)
+  const tags = extractTags($)
+
+  return {
+    source: 'biligo',
+    productName,
+    specs,
+    images,
+    productUrl,
+    rentalPrices: rentalPrices.length > 0 ? rentalPrices : undefined,
+    tags: tags.length > 0 ? tags : undefined,
   }
 }
