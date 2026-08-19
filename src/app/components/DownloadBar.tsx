@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { FileJson, ImageIcon } from 'lucide-react'
 import type { CrawlResponse } from '@/lib/crawlers/types'
 import { isCrawlResult } from '@/lib/crawlers/types'
-import { apiKeyHeaders } from '@/lib/client-headers'
 
 interface Props {
   model: string
@@ -33,9 +32,9 @@ export default function DownloadBar({ model, result, selectedImages }: Props) {
     if (selectedImages.size === 0) return
     setIsDownloadingZip(true)
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/public/api/download/images`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/api/download/images`, {
         method: 'POST',
-        headers: apiKeyHeaders({ 'Content-Type': 'application/json' }),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, urls: [...selectedImages] }),
       })
       const blob = await res.blob()
