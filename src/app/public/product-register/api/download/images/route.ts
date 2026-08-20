@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import JSZip from 'jszip'
+import { assertValidApiKey } from '@/lib/apiKey'
 
 export async function POST(req: NextRequest) {
+  const authError = assertValidApiKey(req)
+  if (authError) return authError
+
   const { model, urls } = await req.json() as { model: string; urls: string[] }
 
   if (!urls?.length) {

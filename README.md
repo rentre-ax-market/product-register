@@ -44,27 +44,47 @@ http://localhost:3000 접속
 src/
 ├── app/
 │   ├── layout.tsx
-│   ├── page.tsx                    # 메인 검색 UI
-│   ├── api/
-│   │   ├── crawl/route.ts          # POST — 다나와 + 빌리고 병렬 크롤
-│   │   └── download/images/route.ts # POST — 이미지 URL → ZIP
-│   └── components/
-│       ├── SearchForm.tsx
-│       ├── SourceCard.tsx
-│       ├── SpecTable.tsx
-│       ├── ImageGrid.tsx
-│       ├── RentalTable.tsx         # 빌리고 렌탈가 비교
-│       └── DownloadBar.tsx
+│   └── public/product-register/    # 마켓 SSO 면제 존 (/proxy/{slug}/public/...)
+│       ├── page.tsx                # 메인 검색 UI
+│       ├── api/
+│       │   ├── crawl/route.ts          # POST — 다나와 + 빌리고 병렬 크롤
+│       │   └── download/images/route.ts # POST — 이미지 URL → ZIP
+│       └── components/
+│           ├── SearchForm.tsx
+│           ├── SourceCard.tsx
+│           ├── SpecTable.tsx
+│           ├── ImageGrid.tsx
+│           ├── RentalTable.tsx     # 빌리고 렌탈가 비교
+│           └── DownloadBar.tsx
 ├── components/ui/                  # shadcn/ui 컴포넌트
 └── lib/
     ├── utils.ts
+    ├── apiKey.ts                   # x-api-key 검증 (timingSafeEqual)
     └── crawlers/
         ├── types.ts
         ├── danawa.ts               # cheerio 기반
         └── biligo.ts               # cheerio + JSON API
 ```
 
+## 마켓 SSO 면제 (/public)
+
+이 앱은 마켓 SSO 없이 접근해야 하는 요구로 전체 UI/API를 `app/public/product-register/` 아래로 배치했습니다.
+SSO 면제는 slug가 아니라 `/proxy/{slug}/public/...` 경로 단위로 적용되기 때문입니다.
+
+`/public` 하위는 마켓 SSO만 면제될 뿐 인터넷에 그대로 노출되므로, 두 API 라우트(`crawl`, `download/images`)는
+`x-api-key` 헤더 + `crypto.timingSafeEqual` 상수시간 비교로 자체 인증을 강제합니다 (`src/lib/apiKey.ts`).
+
+**필수 환경변수** (마켓 `/submit` 등록 폼에 입력):
+
+| 변수 | 설명 |
+|------|------|
+| `NEXT_PUBLIC_PRODUCT_REGISTER_API_KEY` | 클라이언트(`x-api-key` 헤더 전송)와 서버(검증) 양쪽에서 쓰는 공유 키. 미설정 시 API가 500을 반환합니다. |
+
+> `NEXT_PUBLIC_` 접두사라 클라이언트 번들에 포함됩니다 — 이 키는 봇/스캐너의 무단 호출을 막는 최소 게이트(simple key)이지,
+> 페이지를 직접 여는 사용자로부터 값을 숨기기 위한 것이 아닙니다.
+
 ## 배포
 
 마켓플레이스 배포 시 `rentre.config.json` 참조.
 빌드 산출물은 `output: 'standalone'`으로 생성되며 `node .next/standalone/server.js`로 기동합니다.
+등록된 서비스이므로 `next.config.ts` / `package.json`은 이번 변경에서 건드리지 않았습니다(이미 basePath·standalone 설정 완료 상태).

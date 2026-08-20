@@ -32,11 +32,17 @@ export default function DownloadBar({ model, result, selectedImages }: Props) {
     if (selectedImages.size === 0) return
     setIsDownloadingZip(true)
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/api/download/images`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, urls: [...selectedImages] }),
-      })
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/public/product-register/api/download/images`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': process.env.NEXT_PUBLIC_PRODUCT_REGISTER_API_KEY ?? '',
+          },
+          body: JSON.stringify({ model, urls: [...selectedImages] }),
+        }
+      )
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
