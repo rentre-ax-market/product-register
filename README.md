@@ -42,13 +42,15 @@ http://localhost:3000 접속
 
 ```
 src/
+├── proxy.ts                         # Next.js 16 proxy(구 middleware) — /public/product-register/api/** 전체에 API 키 검증 중앙 적용
 ├── app/
 │   ├── layout.tsx
-│   └── public/product-register/    # 마켓 SSO 면제 존 (/proxy/{slug}/public/...)
-│       ├── page.tsx                # 메인 검색 UI
+│   ├── page.tsx                     # 루트("/") → /public/product-register 로 redirect
+│   └── public/product-register/     # 마켓 SSO 면제 존 (/proxy/{slug}/public/...)
+│       ├── page.tsx                 # 메인 검색 UI
 │       ├── api/
 │       │   ├── crawl/route.ts          # POST — 다나와 + 빌리고 병렬 크롤
-│       │   └── download/images/route.ts # POST — 이미지 URL → ZIP
+│       │   └── download/images/route.ts # POST — 이미지 URL → ZIP (호스트 allowlist로 SSRF 방지)
 │       └── components/
 │           ├── SearchForm.tsx
 │           ├── SourceCard.tsx
@@ -59,7 +61,7 @@ src/
 ├── components/ui/                  # shadcn/ui 컴포넌트
 └── lib/
     ├── utils.ts
-    ├── apiKey.ts                   # x-api-key 검증 (timingSafeEqual)
+    ├── client-headers.ts           # 클라이언트 fetch에 x-api-key 헤더 부착
     └── crawlers/
         ├── types.ts
         ├── danawa.ts               # cheerio 기반
@@ -71,15 +73,22 @@ src/
 이 앱은 마켓 SSO 없이 접근해야 하는 요구로 전체 UI/API를 `app/public/product-register/` 아래로 배치했습니다.
 SSO 면제는 slug가 아니라 `/proxy/{slug}/public/...` 경로 단위로 적용되기 때문입니다.
 
-`/public` 하위는 마켓 SSO만 면제될 뿐 인터넷에 그대로 노출되므로, 두 API 라우트(`crawl`, `download/images`)는
-`x-api-key` 헤더 + `crypto.timingSafeEqual` 상수시간 비교로 자체 인증을 강제합니다 (`src/lib/apiKey.ts`).
+`/public` 하위는 마켓 SSO만 면제될 뿐 인터넷에 그대로 노출되므로, `src/proxy.ts`(Next.js 16의 proxy 파일 컨벤션,
+구 middleware)가 `/public/product-register/api/**` 전체 요청에 `x-api-key` 헤더 + `crypto.timingSafeEqual`
+상수시간 비교로 자체 인증을 강제합니다. 라우트 핸들러가 아니라 여기서 한 번에 막으므로, 앞으로 API를 추가해도
+인증 적용을 깜빡할 수 없습니다. `download/images`는 클라이언트가 준 URL을 그대로 fetch하므로 다나와/빌리고
+호스트 allowlist로 SSRF도 함께 막습니다.
 
-**필수 환경변수** (마켓 `/submit` 등록 폼에 입력):
+**필수 환경변수** (마켓 `/submit` 등록 폼에 반드시 둘 다 입력, 같은 값):
 
-| 변수 | 설명 |
-|------|------|
-| `NEXT_PUBLIC_PRODUCT_REGISTER_API_KEY` | 클라이언트(`x-api-key` 헤더 전송)와 서버(검증) 양쪽에서 쓰는 공유 키. 미설정 시 API가 500을 반환합니다. |
+| 변수 | 사용처 | 설명 |
+|------|--------|------|
+| `API_KEY` | 서버 (`src/proxy.ts`) | 미설정 시 API가 500을 반환합니다. |
+| `NEXT_PUBLIC_API_KEY` | 클라이언트 (`src/lib/client-headers.ts`) | 빌드 시 클라이언트 번들에 주입되어 `x-api-key` 헤더로 전송됩니다. |
 
+> ⚠️ 이전 시도(PR #1)가 정확히 이 두 키를 등록 폼에 넣지 않아 배포 후 크롤링이 500/401로 실패해 롤백된 적이
+> 있습니다. 등록 시 반드시 두 값을 동일하게 설정하세요.
+>
 > `NEXT_PUBLIC_` 접두사라 클라이언트 번들에 포함됩니다 — 이 키는 봇/스캐너의 무단 호출을 막는 최소 게이트(simple key)이지,
 > 페이지를 직접 여는 사용자로부터 값을 숨기기 위한 것이 아닙니다.
 

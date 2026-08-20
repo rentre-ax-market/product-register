@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { crawlDanawa } from '@/lib/crawlers/danawa'
 import { crawlBiligo } from '@/lib/crawlers/biligo'
 import type { CrawlResponse } from '@/lib/crawlers/types'
-import { assertValidApiKey } from '@/lib/apiKey'
 
 export async function POST(req: NextRequest) {
-  const authError = assertValidApiKey(req)
-  if (authError) return authError
-
   const { model } = await req.json()
   if (!model?.trim()) {
     return NextResponse.json({ error: '모델명을 입력해주세요.' }, { status: 400 })

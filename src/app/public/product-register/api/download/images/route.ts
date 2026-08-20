@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import JSZip from 'jszip'
-import { assertValidApiKey } from '@/lib/apiKey'
+
+const ALLOWED_IMAGE_HOSTS = [
+  'danawa.com',
+  'xn--299ar6vqrd.com', // 빌리고
+  'biligo.co.kr',
+]
+
+function isAllowedImageUrl(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url)
+    if (protocol !== 'https:') return false
+    return ALLOWED_IMAGE_HOSTS.some((host) => hostname === host || hostname.endsWith(`.${host}`))
+  } catch {
+    return false
+  }
+}
 
 export async function POST(req: NextRequest) {
-  const authError = assertValidApiKey(req)
-  if (authError) return authError
-
   const { model, urls } = await req.json() as { model: string; urls: string[] }
 
   if (!urls?.length) {
@@ -18,6 +30,8 @@ export async function POST(req: NextRequest) {
   await Promise.allSettled(
     urls.map(async (url) => {
       try {
+        if (!isAllowedImageUrl(url)) return
+
         const source = url.includes('danawa') ? 'danawa' : 'biligo'
         counts[source] = (counts[source] ?? 0) + 1
         const idx = String(counts[source]).padStart(2, '0')

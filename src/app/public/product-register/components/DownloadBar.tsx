@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { FileJson, ImageIcon } from 'lucide-react'
 import type { CrawlResponse } from '@/lib/crawlers/types'
 import { isCrawlResult } from '@/lib/crawlers/types'
+import { apiKeyHeaders } from '@/lib/client-headers'
 
 interface Props {
   model: string
@@ -36,10 +37,7 @@ export default function DownloadBar({ model, result, selectedImages }: Props) {
         `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/public/product-register/api/download/images`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': process.env.NEXT_PUBLIC_PRODUCT_REGISTER_API_KEY ?? '',
-          },
+          headers: apiKeyHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ model, urls: [...selectedImages] }),
         }
       )

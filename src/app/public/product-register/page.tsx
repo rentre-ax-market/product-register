@@ -6,6 +6,7 @@ import SearchForm from './components/SearchForm'
 import SourceCard from './components/SourceCard'
 import DownloadBar from './components/DownloadBar'
 import type { CrawlResponse } from '@/lib/crawlers/types'
+import { apiKeyHeaders } from '@/lib/client-headers'
 
 export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -24,10 +25,7 @@ export default function HomePage() {
         `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/public/product-register/api/crawl`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': process.env.NEXT_PUBLIC_PRODUCT_REGISTER_API_KEY ?? '',
-          },
+          headers: apiKeyHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ model }),
         }
       )

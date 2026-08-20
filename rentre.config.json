@@ -3,7 +3,7 @@
   "slug": "product-register",
   "icon": "🔍",
   "description": "모델명으로 다나와·빌리고 스펙과 이미지를 수집하는 내부 도구.",
-  "author": "김동현",
+  "author": "기은서",
   "version": "0.1.0",
   "app": {
     "dir": ".",
