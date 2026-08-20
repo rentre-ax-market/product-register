@@ -20,11 +20,17 @@ export default function HomePage() {
     setQuery(model)
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/api/crawl`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model }),
-      })
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/public/product-register/api/crawl`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': process.env.NEXT_PUBLIC_PRODUCT_REGISTER_API_KEY ?? '',
+          },
+          body: JSON.stringify({ model }),
+        }
+      )
       if (!res.ok) throw new Error('서버 오류')
       const data: CrawlResponse = await res.json()
       setResult(data)
